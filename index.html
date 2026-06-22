@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Chromadepth — Warm Front, Cool Back</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: #000; overflow: hidden; font-family: 'Courier New', monospace; }
+    canvas { display: block; width: 100vw; height: 100vh; }
+    #ui {
+      position: fixed; top: 0; right: 0; width: 235px;
+      background: rgba(0,0,0,0.8); backdrop-filter: blur(8px);
+      border-left: 1px solid rgba(255,255,255,0.07);
+      padding: 14px; color: rgba(255,255,255,0.82);
+      font-size: 11px; line-height: 1.65; z-index: 10;
+      user-select: none; overflow-y: auto; max-height: 100vh;
+    }
+    #ui h2 { font-size: 9px; letter-spacing: 0.16em; text-transform: uppercase;
+      color: rgba(255,255,255,0.28); margin-bottom: 10px;
+      border-bottom: 1px solid rgba(255,255,255,0.07); padding-bottom: 7px; }
+    .slbl { font-size: 9px; letter-spacing: 0.12em; text-transform: uppercase;
+      color: rgba(255,255,255,0.22); margin: 10px 0 5px; }
+    .param { margin-bottom: 7px; }
+    .param label { display: flex; justify-content: space-between; margin-bottom: 2px;
+      color: rgba(255,255,255,0.6); }
+    .param label span { color: rgba(255,255,255,0.28); font-variant-numeric: tabular-nums; }
+    input[type=range] { width: 100%; height: 2px; -webkit-appearance: none; appearance: none;
+      background: rgba(255,255,255,0.1); outline: none; cursor: pointer; }
+    input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 9px; height: 9px;
+      border-radius: 50%; background: rgba(255,255,255,0.7); cursor: pointer; }
+    .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 3px; margin-top: 3px; }
+    .grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 3px; margin-top: 3px; }
+    .btn { background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.09);
+      color: rgba(255,255,255,0.45); padding: 5px 3px; font-size: 9px; letter-spacing: 0.05em;
+      cursor: pointer; transition: all 0.1s; font-family: inherit; line-height: 1.3; }
+    .btn:hover { background: rgba(255,255,255,0.09); color: #fff; }
+    .btn.active { background: rgba(255,255,255,0.12); border-color: rgba(255,255,255,0.28); color: #fff; }
+    .toggle-row { display: flex; gap: 4px; margin-top: 4px; }
+    .fps { position: fixed; bottom: 8px; left: 8px; font-size: 9px;
+      color: rgba(255,255,255,0.18); z-index: 10; font-family: monospace; }
+    #tagline { position: fixed; bottom: 8px; left: 50%; transform: translateX(-50%);
+      font-size: 9px; color: rgba(255,255,255,0.14); z-index: 10; font-family: monospace;
+      letter-spacing: 0.1em; white-space: nowrap; }
+    #depth-hint { font-size: 9px; color: rgba(255,120,40,0.5); margin-top: 5px;
+      min-height: 13px; letter-spacing: 0.04em; }
+  </style>
+</head>
+<body>
+  <canvas id="gl"></canvas>
+  <div id="ui">
+    <h2>Chromadepth</h2>
+
+    <div class="slbl">Regime</div>
+    <div class="grid2">
+      <button class="btn active" data-regime="warm_front">warm front</button>
+      <button class="btn" data-regime="cool_front">cool front</button>
+      <button class="btn" data-regime="glasses_mode">glasses</button>
+      <button class="btn" data-regime="natural">natural</button>
+      <button class="btn" data-regime="edge_enhanced">edge+</button>
+      <button class="btn" data-regime="saturation_map">sat map</button>
+    </div>
+
+    <div class="slbl">Scene</div>
+    <div class="grid3">
+      <button class="btn active" data-scene="tunnel">tunnel</button>
+      <button class="btn" data-scene="landscape">land</button>
+      <button class="btn" data-scene="particles">particles</button>
+    </div>
+
+    <div class="slbl">Depth → Hue</div>
+    <div class="param">
+      <label>hue near (°) <span id="v-hue_near">0</span></label>
+      <input type="range" id="hue_near" min="0" max="360" step="1" value="0">
+    </div>
+    <div class="param">
+      <label>hue far (°) <span id="v-hue_far">240</span></label>
+      <input type="range" id="hue_far" min="0" max="360" step="1" value="240">
+    </div>
+    <div class="param">
+      <label>depth range <span id="v-depth_range">1.00</span></label>
+      <input type="range" id="depth_range" min="0.1" max="2.0" step="0.01" value="1.0">
+    </div>
+    <div id="depth-hint">red near · blue far · depth from aberration</div>
+
+    <div class="slbl">Enhancement</div>
+    <div class="param">
+      <label>edge strength <span id="v-edge_strength">0.00</span></label>
+      <input type="range" id="edge_strength" min="0" max="1" step="0.01" value="0">
+    </div>
+    <div class="param">
+      <label>sat boost <span id="v-sat_boost">1.00</span></label>
+      <input type="range" id="sat_boost" min="0.5" max="3.0" step="0.01" value="1.0">
+    </div>
+    <div class="param">
+      <label>glasses sep. <span id="v-glasses_sep">0.00</span></label>
+      <input type="range" id="glasses_sep" min="0" max="1" step="0.01" value="0">
+    </div>
+
+    <div class="slbl">Scene</div>
+    <div class="param">
+      <label>depth map only <span id="v-show_depth">off</span></label>
+      <input type="range" id="show_depth" min="0" max="1" step="1" value="0">
+    </div>
+    <div class="param">
+      <label>invert depth <span id="v-invert_depth">off</span></label>
+      <input type="range" id="invert_depth" min="0" max="1" step="1" value="0">
+    </div>
+    <div class="param">
+      <label>scene speed <span id="v-speed">0.50</span></label>
+      <input type="range" id="speed" min="0" max="2" step="0.01" value="0.5">
+    </div>
+
+    <div class="slbl">Keys</div>
+    <div style="font-size:9px;color:rgba(255,255,255,0.2);line-height:1.9">
+      <span style="color:rgba(255,255,255,0.35)">SPC</span> cycle scene &nbsp;
+      <span style="color:rgba(255,255,255,0.35)">D</span> invert depth<br>
+      <span style="color:rgba(255,255,255,0.35)">E</span> edge on/off &nbsp;
+      <span style="color:rgba(255,255,255,0.35)">G</span> glasses<br>
+      <span style="color:rgba(255,255,255,0.35)">P</span> depth buffer &nbsp;
+      <span style="color:rgba(255,255,255,0.35)">↑↓</span> depth range
+    </div>
+  </div>
+
+  <div class="fps" id="fps">-- fps</div>
+  <div id="tagline">warm front · cool back · depth from hue</div>
+
+  <script type="module" src="src/js/main.js"></script>
+</body>
+</html>
